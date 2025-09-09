@@ -99,7 +99,7 @@ impl ElementKind {
     fn from_color(color: Color) -> Option<Self> {
         if color == Color::srgba(1., 1., 1., 1.) { Some(ElementKind::Empty) }
         else if color == Color::srgba(0.85882354, 0.70980394, 0.45882353, 1.0) { Some(ElementKind::Sand) }
-        else if color == Color::srgba(0.52,0.52,0.52, 1.) { Some(ElementKind::Stone) }
+        else if color == Color::srgba(0.5176471,0.5176471,0.5176471, 1.) { Some(ElementKind::Stone) }
         else { None }
         
     }
@@ -207,7 +207,7 @@ pub fn user_adds_element(
                         sq_pos.get_color(image).unwrap()
                     ).unwrap();
 
-                    if elem_kind == ElementKind::Empty {
+                    if elem_kind == ElementKind::Empty || selected_elems.kind == ElementKind::Empty {
                         sq_pos.set_color(image, selected_elems.kind.to_color()).unwrap();
                     }
                 }
