@@ -106,8 +106,8 @@ impl ElementKind {
     fn to_color(&self) -> Color {
         match self {
             ElementKind::Empty => Color::srgba(1., 1., 1., 1.),
-            ElementKind::Sand => Color::srgba(0.86, 0.71, 0.46, 1.0),
             ElementKind::Stone => Color::srgba(0.52,0.52,0.52, 1.),
+            ElementKind::Sand => Color::srgba(0.86, 0.71, 0.46, 1.0),
         }
     }
 }
