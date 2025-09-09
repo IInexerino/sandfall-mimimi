@@ -1,9 +1,10 @@
 use std::fmt::Display;
-use bevy::{asset::{Assets, Handle, RenderAssetUsages}, color::{ palettes::css, Color, ColorToPacked}, ecs::{component::Component, query::With, resource::Resource, system::{Commands, Local, Res, ResMut, Single}}, image::{Image, TextureAccessError}, input::{mouse::MouseButton, ButtonInput}, log::info, math::{Vec2, Vec3}, render::{camera::Camera, render_resource::{Extent3d, TextureDimension, TextureFormat}}, sprite::Sprite, transform::components::{GlobalTransform, Transform}, window::{PrimaryWindow, Window}};
+use bevy::{asset::{Assets, Handle, RenderAssetUsages}, color::{ Color, ColorToPacked}, ecs::{component::Component, query::With, resource::Resource, system::{Commands, Local, Res, ResMut, Single}}, image::{Image, TextureAccessError}, input::{mouse::MouseButton, ButtonInput}, math::{Vec2, Vec3}, render::{camera::Camera, render_resource::{Extent3d, TextureDimension, TextureFormat}}, sprite::Sprite, transform::components::{GlobalTransform, Transform}, window::{PrimaryWindow, Window}};
 
-const GRID_SCALE: f32 = 12.;
-const GRID_WIDTH: u32 = 64;
-const GRID_HEIGHT: u32 = 64;
+const GRID_SCALE: f32 = 5.;
+const GRID_WIDTH: u32 = 256;
+const GRID_HEIGHT: u32 = 192;
+const EMPTY_COLOR: Color = Color::srgba(1., 1., 1., 0.);
 
 
 #[derive(Resource)]
@@ -19,8 +20,6 @@ impl UserSelectedElements{
         UserSelectedElements { kind , radius: 1 }
     }
 }
-
-
 
 #[derive(Component)]
 pub struct Grid {
@@ -53,13 +52,17 @@ impl ElementPos {
     pub fn set_color(&self, image: &mut Image, color: Color) -> Result<(), TextureAccessError> {
         image.set_color_at(self.x, self.y, color)
     }
-    pub fn in_bounds(&self, grid_size: &GridSize) -> bool {
-        if self.x < grid_size.width
-        || self.y < grid_size.height {
-            false
-        } else {
-            true
-        }
+    pub fn in_border_bottom(&self, grid_size: &GridSize) -> bool {
+        if self.y < grid_size.height - 1 { true }
+        else { false }
+    }
+    pub fn in_border_left(&self) -> bool {
+        if self.x > 0 { true }
+        else { false }
+    }
+    pub fn in_border_right(&self, grid_size: &GridSize) -> bool {
+        if self.x < grid_size.width - 1 { true }
+        else { false }
     }
     /*
     pub fn get_inbound_coords_within_sq_radius(&self, grid_size: &GridSize, radius: u32) -> Vec<ElementPos> {
@@ -98,7 +101,7 @@ pub enum ElementKind {
 // - 0.00019606 
 impl ElementKind {
     fn from_color(color: Color) -> Option<Self> {
-        if color == Color::srgba(1., 1., 1., 1.) { Some(ElementKind::Empty) }
+        if color == EMPTY_COLOR { Some(ElementKind::Empty) }
         else if color == Color::srgba(0.5176471,0.5176471,0.5176471, 1.) { Some(ElementKind::Stone) }
         else if color == Color::srgba(0.85882354, 0.70980394, 0.45882353, 1.0) { Some(ElementKind::Sand) }
         else if color == Color::srgba(0.21960784,0.61960787,0.8784314, 1.) { Some(ElementKind::Water) }
@@ -107,7 +110,7 @@ impl ElementKind {
     }
     fn to_color(&self) -> Color {
         match self {
-            ElementKind::Empty => Color::srgba(1., 1., 1., 1.),
+            ElementKind::Empty => EMPTY_COLOR,
             ElementKind::Stone => Color::srgba(0.52,0.52,0.52, 1.),
             ElementKind::Sand => Color::srgba(0.86, 0.71, 0.46, 1.0),
             ElementKind::Water => Color::srgba(0.22,0.62,0.88, 1.),
@@ -148,7 +151,7 @@ pub fn empty_grid_image_setup(
         },
         TextureDimension::D2,
         // Initialize it with a black color
-        &(css::WHITE.to_u8_array()),
+        &(EMPTY_COLOR.to_srgba().to_u8_array()),
         // Use the same encoding as the color we set
         TextureFormat::Rgba8UnormSrgb,
         RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
@@ -190,10 +193,8 @@ pub fn user_adds_element(
     || mouse_buttons.just_pressed(MouseButton::Left) {
 
         if let Some(world_pos) = cursor_to_world(window, camera) {
-            info!("Cursor in window: (x: {}, y: {})", world_pos.x, world_pos.y);
             let (g_transform, grid) = grid_q.into_inner();
             if let Some(current_pos) = world_to_grid(world_pos, g_transform, &grid.size, grid.scale) {
-                info!("Cursor in grid: (x: {}, y: {})", current_pos.x, current_pos.y);
 
                 let all_click_squares = if let Some(previous_m_pos) = previous_mouse_pos.0 {
                     bresenham_line(
@@ -209,8 +210,6 @@ pub fn user_adds_element(
                 for sq_pos in all_click_squares {
                     let color = 
                         sq_pos.get_color(image).unwrap();
-
-                    info!("Color: {:?}", color);
 
                     let elem_kind = ElementKind::from_color(
                         color
@@ -250,25 +249,19 @@ fn bresenham_line(x0: i32, y0: i32, x1: i32, y1: i32) -> Vec<ElementPos> {
         if !(x == x0 && y == y0) { 
             points.push(ElementPos::new(x as u32, y as u32));
         }
-
-        
         if x == x1 && y == y1 {
             break;
         }
-        
         let e2 = 2 * err;
-        
         if e2 > -dy {
             err -= dy;
             x += sx;
         }
-        
         if e2 < dx {
             err += dx;
             y += sy;
         }
     }
-    
     points
 }
 
@@ -356,9 +349,9 @@ fn sand_algorithm(
     grid_size: &GridSize,
     dir: u8
 ) {
-    if pos.y < grid_size.height - 1 {
-        let permb_elem_color = [ElementKind::Empty.to_color(), Color::srgba(0.21960784,0.61960787,0.8784314, 1.)];
+    let permb_elem_color = [ElementKind::Empty.to_color(), Color::srgba(0.21960784,0.61960787,0.8784314, 1.)];
 
+    if pos.in_border_bottom(grid_size) {
         let c = image.get_color_at(pos.x, pos.y + 1).unwrap();
         if permb_elem_color.contains(&c) {
             pos.set_color(image, c).unwrap();
@@ -366,43 +359,39 @@ fn sand_algorithm(
 
             return
         } 
-        if dir == 2 {
-            if pos.x > 0 {
+        if dir == 2 || dir == 1{
+            if pos.in_border_left() {
                 let c = image.get_color_at(pos.x - 1, pos.y + 1).unwrap();
                 if permb_elem_color.contains(&c) {
                     pos.set_color(image, c).unwrap();
                     image.set_color_at(pos.x - 1, pos.y + 1 , color).unwrap();
-
                     return
                 } 
             }
-            if pos.x < grid_size.width - 1 {
+            if pos.in_border_right(grid_size) {
                 let c = image.get_color_at(pos.x + 1, pos.y + 1).unwrap();
                 if  permb_elem_color.contains(&c) {
                     pos.set_color(image, c).unwrap();
                     image.set_color_at(pos.x + 1, pos.y + 1 , color).unwrap();
-
                     return
                 }
             }
         } else {
-            if pos.x < grid_size.width - 1 {
+            if pos.in_border_right(grid_size) {
                 let c = image.get_color_at(pos.x + 1, pos.y + 1).unwrap();
                 if  permb_elem_color.contains(&c) {
                     pos.set_color(image, c).unwrap();
                     image.set_color_at(pos.x + 1, pos.y + 1 , color).unwrap();
-
                     return
                 }
             }
-            if pos.x > 0 {
+            if pos.in_border_left() {
                 let c = image.get_color_at(pos.x - 1, pos.y + 1).unwrap();
                 if permb_elem_color.contains(&c) {
                     pos.set_color(image, c).unwrap();
                     image.set_color_at(pos.x - 1, pos.y + 1 , color).unwrap();
-
                     return
-                } 
+                }
             }
         }
     }
@@ -417,46 +406,47 @@ fn water_algorithm(
 ) {
     let permb_elem_color = ElementKind::Empty.to_color();
 
-    if pos.y < grid_size.height - 1{
-
-        if image.get_color_at(pos.x, pos.y + 1).unwrap() == permb_elem_color {
+    if pos.in_border_bottom(grid_size) {
+        let c = image.get_color_at(pos.x, pos.y + 1).unwrap();
+        if c == permb_elem_color {
             pos.set_color(image, permb_elem_color).unwrap();
             image.set_color_at(pos.x, pos.y + 1 , color).unwrap();
-
             return
         } 
     }
-    if dir == 2  {
-        if pos.y < grid_size.height {
-            if pos.x > 0 && image.get_color_at(pos.x - 1, pos.y).unwrap() == permb_elem_color {
+    if dir == 2 || dir == 1 {
+        if pos.in_border_left() {
+            let c = image.get_color_at(pos.x - 1, pos.y).unwrap();
+            if c == permb_elem_color {
                 pos.set_color(image, permb_elem_color).unwrap();
                 image.set_color_at(pos.x - 1, pos.y, color).unwrap();
-
                 return
             } 
-            if pos.x < grid_size.width - 1 && image.get_color_at(pos.x + 1, pos.y).unwrap() == permb_elem_color {
+        }
+        if pos.in_border_right(grid_size) {
+            let c = image.get_color_at(pos.x + 1, pos.y).unwrap();
+            if c == permb_elem_color {
                 pos.set_color(image, permb_elem_color).unwrap();
                 image.set_color_at(pos.x + 1, pos.y, color).unwrap();
-
                 return
             }
         }
-
     } else {
-        if pos.y < grid_size.height {
-            if pos.x < grid_size.width - 1 && image.get_color_at(pos.x + 1, pos.y).unwrap() == permb_elem_color {
+        if pos.in_border_right(grid_size) {
+            let c = image.get_color_at(pos.x + 1, pos.y).unwrap();
+            if c == permb_elem_color {
                 pos.set_color(image, permb_elem_color).unwrap();
                 image.set_color_at(pos.x + 1, pos.y, color).unwrap();
-
                 return
             }
-            if pos.x > 0 && image.get_color_at(pos.x - 1, pos.y).unwrap() == permb_elem_color {
+        }
+        if pos.in_border_left() {
+            let c = image.get_color_at(pos.x - 1, pos.y).unwrap();
+            if c == permb_elem_color {
                 pos.set_color(image, permb_elem_color).unwrap();
                 image.set_color_at(pos.x - 1, pos.y, color).unwrap();
-
                 return
             } 
         }
     }
-
 }
