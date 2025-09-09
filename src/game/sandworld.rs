@@ -91,6 +91,7 @@ pub enum ElementKind {
     Empty,
     Stone,
     Sand,
+    Water,
 }
 // 0.85882354, 0.70980394, 0.45882353
 // - 0.00117646
@@ -98,8 +99,9 @@ pub enum ElementKind {
 impl ElementKind {
     fn from_color(color: Color) -> Option<Self> {
         if color == Color::srgba(1., 1., 1., 1.) { Some(ElementKind::Empty) }
-        else if color == Color::srgba(0.85882354, 0.70980394, 0.45882353, 1.0) { Some(ElementKind::Sand) }
         else if color == Color::srgba(0.5176471,0.5176471,0.5176471, 1.) { Some(ElementKind::Stone) }
+        else if color == Color::srgba(0.85882354, 0.70980394, 0.45882353, 1.0) { Some(ElementKind::Sand) }
+        else if color == Color::srgba(0.21960784,0.61960787,0.8784314, 1.) { Some(ElementKind::Water) }
         else { None }
         
     }
@@ -108,6 +110,7 @@ impl ElementKind {
             ElementKind::Empty => Color::srgba(1., 1., 1., 1.),
             ElementKind::Stone => Color::srgba(0.52,0.52,0.52, 1.),
             ElementKind::Sand => Color::srgba(0.86, 0.71, 0.46, 1.0),
+            ElementKind::Water => Color::srgba(0.22,0.62,0.88, 1.),
         }
     }
 }
@@ -117,6 +120,7 @@ impl Display for ElementKind {
             ElementKind::Empty => write!(f, "[Empty]"),
             ElementKind::Stone => write!(f, "[Stone]"),
             ElementKind::Sand => write!(f, "[Sand]"),
+            ElementKind::Water => write!(f, "[Water]"),
         }
 
         
@@ -203,8 +207,13 @@ pub fn user_adds_element(
                 let image = images.get_mut(&handle.0).expect("Image not found");
 
                 for sq_pos in all_click_squares {
+                    let color = 
+                        sq_pos.get_color(image).unwrap();
+
+                    info!("Color: {:?}", color);
+
                     let elem_kind = ElementKind::from_color(
-                        sq_pos.get_color(image).unwrap()
+                        color
                     ).unwrap();
 
                     if elem_kind == ElementKind::Empty || selected_elems.kind == ElementKind::Empty {
@@ -310,11 +319,14 @@ pub fn main_checking_loop(
     handle: Res<GridImage>,
     mut images: ResMut<Assets<Image>>,
     grid: Single<&Grid>,
+    mut dir: Local<u8>,
 ) {
     let image = images.get_mut(&handle.0).expect("Image not found");
 
-    for x in 0..grid.size.width {
-        for y in (0..grid.size.height).rev() {
+    //let x_range = if *dir { 0..=grid.size.width-1 } else { grid.size.width-1..=0 };
+
+    for x in 0..=grid.size.width-1 {
+        for y in (0..grid.size.height).rev(){
             let pos = ElementPos::new(x, y);
             let color = image.get_color_at(pos.x, pos.y).unwrap();
             let kind = ElementKind::from_color( color ).unwrap();
@@ -324,9 +336,16 @@ pub fn main_checking_loop(
                 ElementKind::Sand => {
                     sand_algorithm(image, &pos, color, &grid.size);
                 },
+                ElementKind::Water => {
+                    water_algorithm(image, &pos, color, &grid.size, *dir);
+                }
             }
         }
     }
+
+    if *dir == 0 { *dir = 1 } 
+    else if *dir == 1 { *dir = 2 }
+    else { *dir = 0 };
 
 }
 
@@ -334,24 +353,88 @@ fn sand_algorithm(
     image: &mut Image,
     pos: &ElementPos,
     color: Color,
-    grid_size: &GridSize
+    grid_size: &GridSize,
 ) {
     if pos.y < grid_size.height - 1 {
-        let permb_elem_color = ElementKind::Empty.to_color();
+        let permb_elem_color = [ElementKind::Empty.to_color(), ElementKind::Water.to_color()];
+
+        let c = image.get_color_at(pos.x, pos.y + 1).unwrap();
+        if permb_elem_color.contains(&c) {
+            pos.set_color(image, c).unwrap();
+            image.set_color_at(pos.x, pos.y + 1 , color).unwrap();
+
+            return
+        } 
+        if pos.x > 0 {
+            let c = image.get_color_at(pos.x - 1, pos.y + 1).unwrap();
+            if permb_elem_color.contains(&c) {
+                pos.set_color(image, c).unwrap();
+                image.set_color_at(pos.x - 1, pos.y + 1 , color).unwrap();
+
+                return
+            } 
+        }
+        if pos.x < grid_size.width - 1 {
+            let c = image.get_color_at(pos.x + 1, pos.y + 1).unwrap();
+            if  permb_elem_color.contains(&c) {
+                pos.set_color(image, c).unwrap();
+                image.set_color_at(pos.x + 1, pos.y + 1 , color).unwrap();
+
+                return
+            }
+        }
+    }
+}
+
+fn water_algorithm(
+    image: &mut Image,
+    pos: &ElementPos,
+    color: Color,
+    grid_size: &GridSize,
+    dir: u8
+) {
+    let permb_elem_color = ElementKind::Empty.to_color();
+
+    if pos.y < grid_size.height - 1{
 
         if image.get_color_at(pos.x, pos.y + 1).unwrap() == permb_elem_color {
             pos.set_color(image, permb_elem_color).unwrap();
             image.set_color_at(pos.x, pos.y + 1 , color).unwrap();
 
-        } else if pos.x > 0 && image.get_color_at(pos.x - 1, pos.y + 1).unwrap() == permb_elem_color {
-            pos.set_color(image, permb_elem_color).unwrap();
-            image.set_color_at(pos.x - 1, pos.y + 1 , color).unwrap();
+            return
+        } 
+    }
+    if dir == 2  {
+        if pos.y < grid_size.height {
+            if pos.x > 0 && image.get_color_at(pos.x - 1, pos.y).unwrap() == permb_elem_color {
+                pos.set_color(image, permb_elem_color).unwrap();
+                image.set_color_at(pos.x - 1, pos.y, color).unwrap();
 
-        } else if pos.x < grid_size.width - 1 && image.get_color_at(pos.x + 1, pos.y + 1).unwrap() == permb_elem_color {
-            pos.set_color(image, permb_elem_color).unwrap();
-            image.set_color_at(pos.x + 1, pos.y + 1 , color).unwrap();
+                return
+            } 
+            if pos.x < grid_size.width - 1 && image.get_color_at(pos.x + 1, pos.y).unwrap() == permb_elem_color {
+                pos.set_color(image, permb_elem_color).unwrap();
+                image.set_color_at(pos.x + 1, pos.y, color).unwrap();
 
+                return
+            }
         }
 
+    } else {
+        if pos.y < grid_size.height {
+            if pos.x < grid_size.width - 1 && image.get_color_at(pos.x + 1, pos.y).unwrap() == permb_elem_color {
+                pos.set_color(image, permb_elem_color).unwrap();
+                image.set_color_at(pos.x + 1, pos.y, color).unwrap();
+
+                return
+            }
+            if pos.x > 0 && image.get_color_at(pos.x - 1, pos.y).unwrap() == permb_elem_color {
+                pos.set_color(image, permb_elem_color).unwrap();
+                image.set_color_at(pos.x - 1, pos.y, color).unwrap();
+
+                return
+            } 
+        }
     }
+
 }

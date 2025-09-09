@@ -79,7 +79,8 @@ fn user_selects_element(
         match element_selection.kind {
             ElementKind::Empty => Some(ElementKind::Sand),
             ElementKind::Sand => Some(ElementKind::Stone),
-            ElementKind::Stone => Some(ElementKind::Empty),
+            ElementKind::Stone => Some(ElementKind::Water),
+            ElementKind::Water => Some(ElementKind::Empty),
         }
     } else { None };
 
