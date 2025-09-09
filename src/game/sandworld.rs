@@ -334,7 +334,7 @@ pub fn main_checking_loop(
             match kind {
                 ElementKind::Empty | ElementKind::Stone => continue,
                 ElementKind::Sand => {
-                    sand_algorithm(image, &pos, color, &grid.size);
+                    sand_algorithm(image, &pos, color, &grid.size, *dir);
                 },
                 ElementKind::Water => {
                     water_algorithm(image, &pos, color, &grid.size, *dir);
@@ -354,9 +354,10 @@ fn sand_algorithm(
     pos: &ElementPos,
     color: Color,
     grid_size: &GridSize,
+    dir: u8
 ) {
     if pos.y < grid_size.height - 1 {
-        let permb_elem_color = [ElementKind::Empty.to_color(), ElementKind::Water.to_color()];
+        let permb_elem_color = [ElementKind::Empty.to_color(), Color::srgba(0.21960784,0.61960787,0.8784314, 1.)];
 
         let c = image.get_color_at(pos.x, pos.y + 1).unwrap();
         if permb_elem_color.contains(&c) {
@@ -365,22 +366,43 @@ fn sand_algorithm(
 
             return
         } 
-        if pos.x > 0 {
-            let c = image.get_color_at(pos.x - 1, pos.y + 1).unwrap();
-            if permb_elem_color.contains(&c) {
-                pos.set_color(image, c).unwrap();
-                image.set_color_at(pos.x - 1, pos.y + 1 , color).unwrap();
+        if dir == 2 {
+            if pos.x > 0 {
+                let c = image.get_color_at(pos.x - 1, pos.y + 1).unwrap();
+                if permb_elem_color.contains(&c) {
+                    pos.set_color(image, c).unwrap();
+                    image.set_color_at(pos.x - 1, pos.y + 1 , color).unwrap();
 
-                return
-            } 
-        }
-        if pos.x < grid_size.width - 1 {
-            let c = image.get_color_at(pos.x + 1, pos.y + 1).unwrap();
-            if  permb_elem_color.contains(&c) {
-                pos.set_color(image, c).unwrap();
-                image.set_color_at(pos.x + 1, pos.y + 1 , color).unwrap();
+                    return
+                } 
+            }
+            if pos.x < grid_size.width - 1 {
+                let c = image.get_color_at(pos.x + 1, pos.y + 1).unwrap();
+                if  permb_elem_color.contains(&c) {
+                    pos.set_color(image, c).unwrap();
+                    image.set_color_at(pos.x + 1, pos.y + 1 , color).unwrap();
 
-                return
+                    return
+                }
+            }
+        } else {
+            if pos.x < grid_size.width - 1 {
+                let c = image.get_color_at(pos.x + 1, pos.y + 1).unwrap();
+                if  permb_elem_color.contains(&c) {
+                    pos.set_color(image, c).unwrap();
+                    image.set_color_at(pos.x + 1, pos.y + 1 , color).unwrap();
+
+                    return
+                }
+            }
+            if pos.x > 0 {
+                let c = image.get_color_at(pos.x - 1, pos.y + 1).unwrap();
+                if permb_elem_color.contains(&c) {
+                    pos.set_color(image, c).unwrap();
+                    image.set_color_at(pos.x - 1, pos.y + 1 , color).unwrap();
+
+                    return
+                } 
             }
         }
     }
